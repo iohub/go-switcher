@@ -1,21 +1,21 @@
 package etcd
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/juju/errors"
 	"go.etcd.io/etcd/clientv3"
 	"golang.org/x/net/context"
 )
 
 var (
-	cli     *clientv3.Client
-	kvStore clientv3.KV
-	config  clientv3.Config
+	cli      *clientv3.Client
+	kvStore  clientv3.KV
+	config   clientv3.Config
+	inited   bool
+	notFound = errors.New("not found")
 )
-
-//	config = clientv3.Config{
-//		Endpoints:   []string{"127.0.0.1:2379"},
-//		DialTimeout: time.Duration(5) * time.Millisecond,
-//	}
 
 func Init(cfg clientv3.Config) error {
 	var err error
@@ -23,6 +23,7 @@ func Init(cfg clientv3.Config) error {
 		return errors.Annotatef(err, "etcd.Init() -> clientv3.New(), config:%+v", cfg)
 	}
 	kvStore = clientv3.NewKV(cli)
+	inited = true
 	return nil
 }
 
@@ -32,7 +33,23 @@ func getVal(ctx context.Context, key string) (string, error) {
 		return "", errors.Annotatef(err, "etcd.getVal() -> Get(), key:%v", key)
 	}
 	if len(rsp.Kvs) == 0 {
-		return "", nil
+		return "", notFound
 	}
 	return string(rsp.Kvs[0].Value), nil
+}
+
+func IsEnable(ctx context.Context, key string, defaultVal bool) bool {
+	if !inited {
+		panic("etcd endpoint not inited")
+	}
+	val, err := getVal(ctx, key)
+	if err == notFound {
+		return defaultVal
+	}
+	val = strings.ToLower(val)
+	b, err := strconv.ParseBool(val)
+	if err != nil {
+		return defaultVal
+	}
+	return b
 }
